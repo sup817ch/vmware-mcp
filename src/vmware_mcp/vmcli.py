@@ -5,28 +5,37 @@ import os
 import json
 from typing import Any
 
+from .executable import resolve_vmware_executable
+
 
 class VMCli:
     """Wrapper for vmcli command line tool."""
 
     def __init__(self, vmcli_path: str | None = None):
-        self.vmcli_path = vmcli_path or os.getenv(
-            "VMCLI_PATH",
-            r"C:\Program Files (x86)\VMware\VMware Workstation\vmcli.exe"
-        )
+        self.vmcli_path = vmcli_path or os.getenv("VMCLI_PATH")
 
     async def _run(self, vmx_path: str | None, module: str, command: str, *args: str) -> str:
+        # Defer discovery so REST-only calls do not require vmcli to be installed.
+        self.vmcli_path = resolve_vmware_executable(
+            "vmcli.exe", "VMCLI_PATH", self.vmcli_path
+        )
         cmd = [self.vmcli_path]
         if vmx_path:
             cmd.append(vmx_path)
         cmd.extend([module, command])
         cmd.extend(args)
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Could not find vmcli.exe at '{self.vmcli_path}'. "
+                "Set VMCLI_PATH to the full path to vmcli.exe."
+            ) from exc
         stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:

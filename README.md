@@ -28,13 +28,31 @@ pip install -e .
 
 ## 配置
 
-启动 vmrest 服务：
-```bash
+`vmcli.exe` 和 `vmrun.exe` 会在首次执行命令时按以下优先级查找：
+
+1. Python 构造函数中传入的 `vmcli_path` / `vmrun_path`。
+2. 环境变量 `VMCLI_PATH` / `VMRUN_PATH`。
+3. `%ProgramFiles%\VMware\VMware Workstation`（Workstation Pro 26H1 的默认安装目录）。
+4. `%ProgramFiles(x86)%\VMware\VMware Workstation`（旧版默认安装目录）。
+
+自动查找只使用实际存在的可执行文件；找不到时会提示检查过的路径并设置对应环境变量。自定义路径优先使用，配置错误时不会自动切换到其他安装目录。
+
+如果 VMware 安装在自定义目录，可以在 MCP 客户端的环境变量配置中设置：
+
+```json
+{
+  "VMCLI_PATH": "D:\\VMware\\VMware Workstation\\vmcli.exe",
+  "VMRUN_PATH": "D:\\VMware\\VMware Workstation\\vmrun.exe"
+}
+```
+
+启动 vmrest 服务（以下 PowerShell 示例使用 26H1 默认目录，旧版请改用 `${env:ProgramFiles(x86)}` 对应的目录或实际安装路径）：
+```powershell
 # 首次配置
-"C:\Program Files (x86)\VMware\VMware Workstation\vmrest.exe" -C
+& "$env:ProgramFiles\VMware\VMware Workstation\vmrest.exe" -C
 
 # 启动服务
-"C:\Program Files (x86)\VMware\VMware Workstation\vmrest.exe"
+& "$env:ProgramFiles\VMware\VMware Workstation\vmrest.exe"
 ```
 
 添加到 Claude Code：

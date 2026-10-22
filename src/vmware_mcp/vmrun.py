@@ -3,17 +3,20 @@
 import asyncio
 import os
 
+from .executable import resolve_vmware_executable
+
 
 class VMRun:
     """Wrapper for vmrun command line tool."""
 
     def __init__(self, vmrun_path: str | None = None):
-        self.vmrun_path = vmrun_path or os.getenv(
-            "VMRUN_PATH",
-            r"C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe"
-        )
+        self.vmrun_path = vmrun_path or os.getenv("VMRUN_PATH")
 
     async def _run(self, command: str, *args: str, guest_user: str = "", guest_pass: str = "") -> str:
+        # Defer discovery so REST-only calls do not require vmrun to be installed.
+        self.vmrun_path = resolve_vmware_executable(
+            "vmrun.exe", "VMRUN_PATH", self.vmrun_path
+        )
         cmd = [self.vmrun_path, "-T", "ws"]
         if guest_user:
             cmd.extend(["-gu", guest_user])
@@ -22,11 +25,17 @@ class VMRun:
         cmd.append(command)
         cmd.extend(args)
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Could not find vmrun.exe at '{self.vmrun_path}'. "
+                "Set VMRUN_PATH to the full path to vmrun.exe."
+            ) from exc
         stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:
