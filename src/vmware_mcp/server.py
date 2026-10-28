@@ -23,12 +23,12 @@ def get_client() -> VMwareClient:
     )
 
 
-def get_vmcli() -> VMCli:
-    return VMCli()
+def get_vmcli(vm_password: str | None = None) -> VMCli:
+    return VMCli(vm_password=vm_password)
 
 
-def get_vmrun() -> VMRun:
-    return VMRun()
+def get_vmrun(vm_password: str | None = None) -> VMRun:
+    return VMRun(vm_password=vm_password)
 
 
 async def get_vmx_path(vm_id: str) -> str:
@@ -47,6 +47,13 @@ async def get_vmx_path(vm_id: str) -> str:
 
 def T(name: str, desc: str, props: dict, required: list | None = None) -> Tool:
     """Helper to create Tool definitions."""
+    # REST vm_* tools use vmrest authentication; CLI tools open encrypted VMX files.
+    if "vm_id" in props and not name.startswith("vm_"):
+        props = {**props, "vm_password": {
+            "type": "string",
+            "description": "VM encryption password, separate from the guest OS password. Defaults to VMWARE_VM_PASSWORD; an empty string overrides that default.",
+            "writeOnly": True,
+        }}
     schema = {"type": "object", "properties": props}
     if required:
         schema["required"] = required
@@ -227,8 +234,8 @@ async def list_tools() -> list[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     client = get_client()
-    vmcli = get_vmcli()
-    vmrun = get_vmrun()
+    vmcli = get_vmcli(arguments.get("vm_password"))
+    vmrun = get_vmrun(arguments.get("vm_password"))
     result = None
     a = arguments
 

@@ -1,18 +1,17 @@
 """VMware vmcli command line wrapper."""
 
-import asyncio
 import os
-import json
-from typing import Any
 
 from .executable import resolve_vmware_executable
+from .process import run_command
 
 
 class VMCli:
     """Wrapper for vmcli command line tool."""
 
-    def __init__(self, vmcli_path: str | None = None):
+    def __init__(self, vmcli_path: str | None = None, *, vm_password: str | None = None):
         self.vmcli_path = vmcli_path or os.getenv("VMCLI_PATH")
+        self.vm_password = vm_password if vm_password is not None else os.getenv("VMWARE_VM_PASSWORD", "")
 
     async def _run(self, vmx_path: str | None, module: str, command: str, *args: str) -> str:
         # Defer discovery so REST-only calls do not require vmcli to be installed.
@@ -26,23 +25,21 @@ class VMCli:
         cmd.extend(args)
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            guest_password = next(
+                (cmd[index + 1] for index, value in enumerate(cmd[:-1]) if value in {"-P", "--password"}),
+                "",
+            )
+            return await run_command(
+                cmd,
+                tool="vmcli",
+                console_password=self.vm_password if vmx_path else None,
+                secrets=(self.vm_password, guest_password),
             )
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Could not find vmcli.exe at '{self.vmcli_path}'. "
                 "Set VMCLI_PATH to the full path to vmcli.exe."
             ) from exc
-        stdout, stderr = await proc.communicate()
-
-        if proc.returncode != 0:
-            error_msg = stderr.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"vmcli failed: {error_msg}")
-
-        return stdout.decode("utf-8", errors="replace").strip()
 
     # === Snapshot ===
     async def snapshot_list(self, vmx_path: str) -> str:
@@ -148,10 +145,10 @@ class VMCli:
 
     # === MKS (Mouse, Keyboard, Screen) ===
     async def mks_screenshot(self, vmx_path: str, output_path: str) -> str:
-        return await self._run(vmx_path, "MKS", "captureScreenshot", "-o", output_path)
+        return await self._run(vmx_path, "MKS", "captureScreenshot", output_path)
 
     async def mks_send_key(self, vmx_path: str, key_sequence: str) -> str:
-        return await self._run(vmx_path, "MKS", "sendKeySequence", "-s", key_sequence)
+        return await self._run(vmx_path, "MKS", "sendKeySequence", key_sequence)
 
     async def mks_query(self, vmx_path: str) -> str:
         return await self._run(vmx_path, "MKS", "query")

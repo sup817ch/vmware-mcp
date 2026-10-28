@@ -63,6 +63,42 @@ claude mcp add vmware-mcp \
   -- vmware-mcp
 ```
 
+### 加密虚拟机
+
+所有带 `vm_id` 的 vmrun/vmcli 工具均支持可选的 `vm_password` 参数，用于打开加密的虚拟机。例如：
+
+```json
+{
+  "vm_id": "C:\\vm\\Windows_11_x64\\Windows 11 x64.vmx",
+  "vm_password": "your-vm-encryption-password"
+}
+```
+
+可以将以上参数传给 `vmrun_tools_state`、`power_query`、`mks_query` 等工具。
+也可以在 MCP 客户端的环境变量配置中设置默认值：
+
+```json
+{
+  "VMWARE_VM_PASSWORD": "your-vm-encryption-password"
+}
+```
+
+单次调用的 `vm_password` 优先于环境变量；显式传入空字符串可以覆盖默认值，适用于未加密虚拟机。密码仅用于当前调用，不写入项目文件或日志；命令输出中的加密密码和来宾密码会被脱敏。
+
+三个密码的用途分别为：
+
+| 参数或环境变量 | 用途 |
+|---|---|
+| `vm_password` / `VMWARE_VM_PASSWORD` | 虚拟机加密密码 |
+| 来宾工具的 `user`、`password` 参数 | Windows/Linux 来宾账户登录 |
+| `VMWARE_USERNAME`、`VMWARE_PASSWORD` | vmrest REST API 登录 |
+
+vmrun 使用原生 `-vp` 参数传递加密密码。Windows 上的 vmcli 使用 ConPTY 控制台响应加密密码提示，需要 `pywinpty`，安装项目依赖时会自动安装。提供加密密码不会解除来宾操作对有效系统账户凭据的要求；Windows 空密码账户仍可能被 VMware 拒绝。
+
+CLI 命令默认在 300 秒后超时并清理命令子进程。克隆等耗时操作可以通过 `VMWARE_COMMAND_TIMEOUT` 设置更长的超时时间（单位为秒）。未提供加密密码时，命令不会读取 MCP 的标准输入；错误信息会提示设置 `vm_password` 或 `VMWARE_VM_PASSWORD`。
+
+更新代码后执行 `python -m pip install -e .` 安装依赖，再重新连接或重启 MCP 服务，使客户端加载新的工具参数。
+
 ## 工具列表
 
 ### REST API 工具

@@ -1,16 +1,17 @@
 """VMware vmrun command line wrapper."""
 
-import asyncio
 import os
 
 from .executable import resolve_vmware_executable
+from .process import run_command
 
 
 class VMRun:
     """Wrapper for vmrun command line tool."""
 
-    def __init__(self, vmrun_path: str | None = None):
+    def __init__(self, vmrun_path: str | None = None, *, vm_password: str | None = None):
         self.vmrun_path = vmrun_path or os.getenv("VMRUN_PATH")
+        self.vm_password = vm_password if vm_password is not None else os.getenv("VMWARE_VM_PASSWORD", "")
 
     async def _run(self, command: str, *args: str, guest_user: str = "", guest_pass: str = "") -> str:
         # Defer discovery so REST-only calls do not require vmrun to be installed.
@@ -18,6 +19,12 @@ class VMRun:
             "vmrun.exe", "VMRUN_PATH", self.vmrun_path
         )
         cmd = [self.vmrun_path, "-T", "ws"]
+        host_commands = {
+            "list", "listHostNetworks", "listPortForwardings",
+            "setPortForwarding", "deletePortForwarding",
+        }
+        if self.vm_password and command not in host_commands:
+            cmd.extend(["-vp", self.vm_password])
         if guest_user:
             cmd.extend(["-gu", guest_user])
         if guest_pass:
@@ -26,25 +33,14 @@ class VMRun:
         cmd.extend(args)
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            return await run_command(
+                cmd, tool="vmrun", secrets=(self.vm_password, guest_pass),
             )
         except FileNotFoundError as exc:
             raise FileNotFoundError(
                 f"Could not find vmrun.exe at '{self.vmrun_path}'. "
                 "Set VMRUN_PATH to the full path to vmrun.exe."
             ) from exc
-        stdout, stderr = await proc.communicate()
-
-        if proc.returncode != 0:
-            error_msg = stderr.decode("utf-8", errors="replace").strip()
-            if not error_msg:
-                error_msg = stdout.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"vmrun failed: {error_msg}")
-
-        return stdout.decode("utf-8", errors="replace").strip()
 
     # === Power ===
     async def start(self, vmx_path: str, gui: bool = True) -> str:
